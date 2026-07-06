@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Teachers' Game Tracker v. 1.1</title>
+<title>Teachers' Game Tracker v. 1.2</title>
 
 <!-- PWA / Add to Home Screen -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Teachers' Game">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1f5c4a">
+<meta name="color-scheme" content="light only">
 
 <!-- App icon — inline SVG converted to data URI so no external files needed -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%231f5c4a'/%3E%3Ctext x='90' y='125' font-size='100' text-anchor='middle' font-family='Arial'>🦅%3C/text%3E%3C/svg%3E">
@@ -19,6 +20,7 @@
 /* Safe area padding for iPhone notch/home indicator */
 body { padding-bottom: max(80px, calc(80px + env(safe-area-inset-bottom))); padding-top: env(safe-area-inset-top); }
 :root{
+  color-scheme: light;
   --bg:#f5f3ee;--card:#fff;--border:#ddd8cc;--border-strong:#c7c1b0;
   --text:#1f2420;--muted:#6b6b63;
   --green:#2f6e4d;--green-bg:#e6f0e9;
@@ -114,17 +116,33 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
   body{padding:10px;}
   .sum-card{break-inside:avoid;}
 }
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#f5f3ee;--card:#fff;--border:#ddd8cc;--border-strong:#c7c1b0;
+    --text:#1f2420;--muted:#6b6b63;
+    --green:#2f6e4d;--green-bg:#e6f0e9;
+    --red:#a23b2f;--red-bg:#f5e8e5;
+    --accent:#1f5c4a;--accent-bg:#e3efe9;
+    --gold:#8a6a1f;--gold-bg:#f3ecdb;
+  }
+  html,body{background:#f5f3ee !important;color:#1f2420 !important;}
+  .card,.sum-card,.seg-card{background:#fff !important;color:#1f2420 !important;}
+  input,select{background:#fff !important;color:#1f2420 !important;}
+  button{background:#fff !important;color:#1f2420 !important;}
+  table,td,th{color:#1f2420 !important;}
+}
 </style>
 </head>
 <body>
 <div class="wrap">
 <h1>The Teachers' Game</h1>
-<p class="sub">Whidbey Golf Club &mdash; v. 1.1</p>
+<p class="sub">Whidbey Golf Club &mdash; v. 1.2</p>
 
 <div class="tabs">
   <button class="tab on"  data-tab="setup">Setup</button>
   <button class="tab" data-tab="rotations" disabled>Rotations</button>
   <button class="tab" data-tab="scorecard" disabled>Score Entry</button>
+  <button class="tab" data-tab="results"   disabled>Results</button>
   <button class="tab" data-tab="card"      disabled>Scorecard</button>
   <button class="tab" data-tab="skins"     disabled>Skins</button>
   <button class="tab" data-tab="hawk"      disabled>Hawk</button>
@@ -196,6 +214,12 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
     <button class="btn-sm" id="sc-next">next →</button>
   </div>
   <div id="sc-results"></div>
+</div>
+
+<!-- RESULTS -->
+<div class="panel" id="panel-results">
+  <p class="muted">Hole-by-hole match results by rotation</p>
+  <div id="results-wrap"></div>
 </div>
 
 <!-- SCORECARD -->
@@ -563,6 +587,7 @@ function go(tab){
   document.querySelector('[data-tab="'+tab+'"]').classList.add('on');
   if(tab==='rotations') renderRotations();
   if(tab==='scorecard') renderScorecard();
+  if(tab==='results')   renderResults();
   if(tab==='card')      renderCard();
   if(tab==='skins')     renderSkins();
   if(tab==='hawk')      renderHawkTab();
@@ -571,37 +596,16 @@ function go(tab){
 document.querySelectorAll('.tab').forEach(t=>{ t.onclick=()=>{ if(!t.disabled) go(t.dataset.tab); }; });
 
 // ─── SETUP ────────────────────────────────────────────────────────────────────
-const STANDARD_NAMES = ['Dave Phay','Dave Smith','Denny','Germ','Gordon','Jeff','Matzen','Mike','Pat','Roger','Steve','Stone','TJ','Tom','Tracy'];
-
 function renderPInputs(){
   const c=document.getElementById('p-inputs'); c.innerHTML='';
   S.players.forEach((p,i)=>{
     const row=document.createElement('div'); row.className='p-row';
 
-    // Name: dropdown + optional free-text
-    const nameWrap=document.createElement('div'); nameWrap.style='flex:2;display:flex;gap:5px;';
-    const sel=document.createElement('select'); sel.style='flex:1;';
-    const isStandard=STANDARD_NAMES.includes(p.name);
-    // Options: blank, standard names, Other
-    sel.innerHTML='<option value="">— pick —</option>'
-      +STANDARD_NAMES.map(n=>'<option value="'+n+'"'+(p.name===n?' selected':'')+'>'+n+'</option>').join('')
-      +'<option value="__other__"'+(!isStandard&&p.name?' selected':'')+'>Other…</option>';
-    const ni=document.createElement('input'); ni.type='text'; ni.placeholder='Type name';
-    ni.style='flex:1;display:'+((!isStandard&&p.name)?'block':'none');
-    ni.value=(!isStandard)?p.name:'';
-    sel.onchange=e=>{
-      const v=e.target.value;
-      if(v==='__other__'){
-        ni.style.display='block'; ni.focus();
-        S.players[i].name=ni.value; 
-      } else {
-        ni.style.display='none';
-        S.players[i].name=v;
-      }
-      renderDailyNote();
-    };
+    const nameWrap=document.createElement('div'); nameWrap.style='flex:2;';
+    const ni=document.createElement('input'); ni.type='text'; ni.placeholder='Player name';
+    ni.style='width:100%;'; ni.value=p.name||'';
     ni.oninput=e=>{S.players[i].name=e.target.value; renderDailyNote();};
-    nameWrap.appendChild(sel); nameWrap.appendChild(ni);
+    nameWrap.appendChild(ni);
 
     const hw=document.createElement('div'); hw.className='hw';
     const hl=document.createElement('label'); hl.className='lbl'; hl.textContent='Course HCP';
@@ -645,7 +649,7 @@ document.getElementById('start-btn').onclick=()=>{
   S.started=true; S.hawkStart=99; S.hawkIdx=null;
   S.rotations=[]; S.scores={}; S.hawkData={}; S.curHole=1;
   autosave();
-  ['rotations','scorecard','card','skins','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=false);
+  ['rotations','scorecard','results','card','skins','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=false);
   document.querySelector('[data-tab="hawk"]').disabled=true;
 };
 
@@ -1563,10 +1567,9 @@ function renderSummary(){
     html+='<p style="font-size:14px;font-weight:600;cursor:pointer;" onclick="var el=document.getElementById(\''+id+'\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'">'
       +nm+' <span style="font-size:12px;font-weight:400;color:var(--muted)">▸ tap</span></p>';
     html+='<div id="'+id+'" style="display:none;margin-top:9px;">';
-    html+='<table class="det"><tr><th></th><th>Total</th></tr>';
+    html+='<table class="det"><tr><th></th><th style="text-align:right">Match</th><th style="text-align:right">Pos</th><th style="text-align:right">Total</th></tr>';
     S.rotations.forEach((rot,ri)=>{
-      // Sum across all matchups involving player i
-      let rotTotal=0;
+      let rotMatch=0, rotPos=0;
       rot.matchups.forEach(m=>{
         if(!m.teamA.includes(i)&&!m.teamB.includes(i)) return;
         const r=rotRunning(m,rot.start,rot.end,rot.end);
@@ -1576,10 +1579,18 @@ function renderSummary(){
         if(onA){if(diff>0)mMoney=mv;else if(diff<0)mMoney=-mv;}
         else{if(diff<0)mMoney=mv;else if(diff>0)mMoney=-mv;}
         const posDiff=onA?(r.posA-r.posB):(r.posB-r.posA);
-        rotTotal+=mMoney+posDiff*S.posVal;
+        rotMatch+=mMoney;
+        rotPos+=posDiff*S.posVal;
       });
-      const cls=rotTotal>0?'color:var(--green)':rotTotal<0?'color:var(--red)':'';
-      html+='<tr><td>Rotation '+(ri+1)+'</td><td style="font-weight:600;'+cls+'">'+(rotTotal>=0?'+':'')+rotTotal.toFixed(2)+'</td></tr>';
+      const rotTotal=rotMatch+rotPos;
+      const mCls=rotMatch>0?'color:var(--green)':rotMatch<0?'color:var(--red)':'';
+      const pCls=rotPos>0?'color:var(--green)':rotPos<0?'color:var(--red)':'';
+      const tCls=rotTotal>0?'color:var(--green)':rotTotal<0?'color:var(--red)':'';
+      html+='<tr><td>Rotation '+(ri+1)+'</td>'
+        +'<td style="text-align:right;font-weight:600;'+mCls+'">'+(rotMatch>=0?'+':'')+rotMatch.toFixed(2)+'</td>'
+        +'<td style="text-align:right;font-weight:600;'+pCls+'">'+(rotPos>=0?'+':'')+rotPos.toFixed(2)+'</td>'
+        +'<td style="text-align:right;font-weight:600;'+tCls+'">'+(rotTotal>=0?'+':'')+rotTotal.toFixed(2)+'</td>'
+        +'</tr>';
     });
     // Hawk per hole
     const hawkHoles=Object.keys(S.hawkData).map(Number).sort((a,b)=>a-b);
@@ -1587,9 +1598,9 @@ function renderSummary(){
       const hm2=hawkHoleMoney(h);
       const v=hm2[i];
       const cls=v>0?'color:var(--green)':v<0?'color:var(--red)':'';
-      html+='<tr><td>Hawk H'+h+'</td><td colspan="2" style="font-size:12px;color:var(--muted)">match+pos</td><td style="font-weight:600;'+cls+'">'+(v>=0?'+':'')+v.toFixed(2)+'</td></tr>';
+      html+='<tr><td>Hawk H'+h+'</td><td colspan="2" style="font-size:12px;color:var(--muted);text-align:right;">match+pos</td><td style="text-align:right;font-weight:600;'+cls+'">'+(v>=0?'+':'')+v.toFixed(2)+'</td></tr>';
     });
-    html+='<tr style="font-weight:700"><td>Total</td><td colspan="2"></td><td>'+(tot[i]>=0?'+':'')+tot[i].toFixed(2)+'</td></tr>';
+    html+='<tr style="font-weight:700;border-top:2px solid var(--border-strong)"><td>Total</td><td colspan="2"></td><td style="text-align:right">'+(tot[i]>=0?'+':'')+tot[i].toFixed(2)+'</td></tr>';
     html+='</table></div></div>';
   });
 
@@ -1650,7 +1661,7 @@ function autosave(){ saveState(); }
 (function(){
   if(loadState()){
     // Unlock tabs that were active
-    ['rotations','scorecard','card','skins','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=false);
+    ['rotations','scorecard','results','card','skins','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=false);
     if(S.hawkStart<=S.holes) document.querySelector('[data-tab="hawk"]').disabled=false;
     // Show resume banner
     const banner=document.createElement('div');
@@ -1678,7 +1689,7 @@ function autosave(){ saveState(); }
         matchVal:3,posVal:0.25,hawkStart:99,hawkIdx:null,
         rotations:[],scores:{},hawkData:{},curHole:1,
       });
-      ['rotations','scorecard','card','skins','hawk','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=true);
+      ['rotations','scorecard','results','card','skins','hawk','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=true);
       document.querySelector('[data-tab="setup"]').disabled=false;
       go('setup'); renderPInputs(); renderSiGrid();
       banner.remove();
@@ -1935,6 +1946,207 @@ function renderCard(){
     body.innerHTML=html;
     div.appendChild(body);
     wrap.appendChild(div);
+  });
+}
+
+// ─── RESULTS ──────────────────────────────────────────────────────────────────
+function renderResults(){
+  const nms=ns(), wrap=document.getElementById('results-wrap');
+  wrap.innerHTML='';
+  if(!S.rotations.length){
+    wrap.innerHTML='<p style="font-size:13px;color:var(--muted)">No rotations yet.</p>';
+    return;
+  }
+
+  S.rotations.forEach((rot,ri)=>{
+    const card=document.createElement('div'); card.className='card'; card.style.marginBottom='10px';
+    const bodyId='rot-body-'+ri;
+
+    // Rotation header — tappable to expand/collapse
+    const last=lastScoredHole(rot);
+    const rotSt=rot.matchups.length?statusLabel(
+      rot.matchups.reduce((s,m)=>{const r=rotRunning(m,rot.start,rot.end,last);return s+r.aTotal;},0),
+      rot.matchups.reduce((s,m)=>{const r=rotRunning(m,rot.start,rot.end,last);return s+r.bTotal;},0),
+      rot.start,rot.end,last,last
+    ):null;
+
+    const hdr=document.createElement('p');
+    hdr.style.cssText='font-size:14px;font-weight:700;cursor:pointer;margin:0;display:flex;justify-content:space-between;align-items:center;';
+    const hdrLeft=document.createElement('span');
+    hdrLeft.textContent='Rotation '+(ri+1)+': Holes '+rot.start+'–'+rot.end;
+    const hdrRight=document.createElement('span');
+    hdrRight.style.cssText='font-size:12px;font-weight:400;color:var(--muted);';
+    hdrRight.textContent='▸';
+    hdr.appendChild(hdrLeft); hdr.appendChild(hdrRight);
+    hdr.onclick=()=>{
+      const body=document.getElementById(bodyId);
+      const open=body.style.display!=='none';
+      body.style.display=open?'none':'block';
+      hdrRight.textContent=open?'▸':'▴';
+    };
+    card.appendChild(hdr);
+
+    // Expandable body
+    const body=document.createElement('div');
+    body.id=bodyId; body.style.display='none'; body.style.marginTop='10px';
+
+    rot.matchups.forEach(m=>{
+      // Matchup label — bold red Team A in 5-player since they're the fixed pair
+      const matchLbl=document.createElement('p');
+      matchLbl.style.cssText='font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600;';
+      const teamALabel=np()===5
+        ?'<span style="color:var(--red);font-weight:700;">'+m.teamA.map(i=>nms[i]).join('/')+'</span>'
+        :'<span style="color:var(--red);font-weight:700;">'+m.teamA.map(i=>nms[i]).join('/')+'</span>';
+      const teamBLabel='<span style="color:#2563eb;font-weight:700;">'+m.teamB.map(i=>nms[i]).join('/')+'</span>';
+      matchLbl.innerHTML=teamALabel+' vs '+teamBLabel;
+      body.appendChild(matchLbl);
+
+      // Table
+      const tbl=document.createElement('table');
+      tbl.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:10px;';
+      tbl.innerHTML='<tr style="border-bottom:1px solid var(--border);">'
+        +'<th style="padding:3px 4px;text-align:left;font-size:11px;color:var(--muted)">H</th>'
+        +'<th style="padding:3px 4px;text-align:center;font-size:11px;color:var(--muted)">Par</th>'
+        +'<th style="padding:3px 4px;text-align:center;font-size:11px;color:var(--muted)">Low</th>'
+        +'<th style="padding:3px 4px;text-align:center;font-size:11px;color:var(--muted)">High</th>'
+        +'<th style="padding:3px 4px;text-align:center;font-size:11px;color:var(--muted)">Pos</th>'
+        +'<th style="padding:3px 4px;text-align:right;font-size:11px;color:var(--muted)">Score</th>'
+        +'</tr>';
+
+      let aTotal=0, bTotal=0;
+      const teamAName=m.teamA.map(i=>nms[i]).join('/');
+      const teamBName=m.teamB.map(i=>nms[i]).join('/');
+
+      // Helper: W/L/PUSH from Team A perspective
+      function wlp(aPts, bPts){
+        if(aPts>bPts) return '<span style="color:var(--red);font-weight:700;">W</span>';
+        if(aPts<bPts) return '<span style="color:#2563eb;font-weight:700;">L</span>';
+        return '<span style="font-weight:700;">PUSH</span>';
+      }
+
+      for(let h=rot.start;h<=rot.end;h++){
+        const hr=holeResult(m,h);
+        const par=S.par[h-1];
+        if(!hr){
+          tbl.innerHTML+='<tr style="border-bottom:1px solid var(--border);">'
+            +'<td style="padding:4px;color:var(--muted)">'+h+'</td>'
+            +'<td style="padding:4px;text-align:center;color:var(--muted)">'+par+'</td>'
+            +'<td colspan="4" style="padding:4px;color:var(--muted);font-size:11px;">Not scored</td>'
+            +'</tr>';
+          continue;
+        }
+
+        aTotal+=hr.aPts; bTotal+=hr.bPts;
+
+        // Determine low/high result from Team A perspective
+        // Get net scores per team to find who won low and high
+        const allNets=[...m.teamA,...m.teamB].map(i=>({i,n:dailyNet(i,h),onA:m.teamA.includes(i)})).filter(x=>x.n);
+        const netSorted=[...allNets].sort((a,b)=>compareNets(b.n,a.n)); // ascending net (best=last)
+        // Low net = lowest val = last in descending sort
+        const lowBest=netSorted[netSorted.length-1];
+        const highBest=netSorted[0];
+
+        // Derive low/high W/L/PUSH from holeResult which already computed correctly
+        // aPts and bPts each count: 1 for low net win, 1 for high net win
+        // We need to know which of the two points (low/high) each team won
+        // Do it by comparing nets directly using same logic as holeResult
+        function netWLP(wantLow){
+          const teamANets=allNets.filter(x=>x.onA);
+          const teamBNets=allNets.filter(x=>!x.onA);
+          if(!teamANets.length||!teamBNets.length) return '<span style="color:var(--muted)">—</span>';
+          // Low: best (lowest) net on each team
+          // High: worst (highest) net on each team
+          // In both cases, the LOWER net value wins the point
+          const bestA=wantLow
+            ?teamANets.reduce((b,x)=>compareNets(x.n,b.n)>0?x:b)  // lowest net (compareNets>0 = x is lower)
+            :teamANets.reduce((b,x)=>compareNets(x.n,b.n)<0?x:b);  // highest net (compareNets<0 = x is higher)
+          const bestB=wantLow
+            ?teamBNets.reduce((b,x)=>compareNets(x.n,b.n)>0?x:b)
+            :teamBNets.reduce((b,x)=>compareNets(x.n,b.n)<0?x:b);
+          // In both cases, lower net wins — cmp>0 means bestA is lower = A wins
+          const cmp=compareNets(bestA.n,bestB.n);
+          if(cmp>0) return '<span style="color:var(--red);font-weight:700;">W</span>';
+          if(cmp<0) return '<span style="color:#2563eb;font-weight:700;">L</span>';
+          return '<span style="font-weight:700;">PUSH</span>';
+        }
+
+        const lowDisp=netWLP(true);
+        const highDisp=netWLP(false);
+
+        // Positives
+        const sc=S.scores[h];
+        const posA=sc?m.teamA.reduce((s,i)=>s+(+(sc.pos[i])||0),0):0;
+        const posB=sc?m.teamB.reduce((s,i)=>s+(+(sc.pos[i])||0),0):0;
+        const posDiff=posA-posB;
+        const posDisp=posDiff===0
+          ?'<span style="color:var(--muted)">—</span>'
+          :'<span style="color:'+(posDiff>0?'var(--red)':'#2563eb')+';font-weight:700;">'+(posDiff>0?'+':'')+posDiff+'</span>';
+
+        // Running score with team names — match points and positives separate
+        const diff=aTotal-bTotal;
+
+        // Cumulative positives through this hole
+        let cumPosA=0, cumPosB=0;
+        for(let ph=rot.start;ph<=h;ph++){
+          const psc=S.scores[ph];
+          if(psc){
+            cumPosA+=m.teamA.reduce((s,i)=>s+(+(psc.pos[i])||0),0);
+            cumPosB+=m.teamB.reduce((s,i)=>s+(+(psc.pos[i])||0),0);
+          }
+        }
+        const posCum=cumPosA-cumPosB;
+
+        let matchStr;
+        if(diff===0) matchStr='All square';
+        else matchStr=teamAName+': '+(diff>0?'+':'')+diff;
+
+        const posStr='Pos: '+(posCum>=0?'+':'')+posCum;
+        const matchCls=diff>0?'color:var(--red);font-weight:700;':diff<0?'color:#2563eb;font-weight:700;':'color:var(--muted);font-weight:700;';
+        const posCls2=posCum>0?'color:var(--red);':posCum<0?'color:#2563eb;':'color:var(--muted);';
+        const scoreCls='';
+
+        tbl.innerHTML+='<tr style="border-bottom:1px solid var(--border);">'
+          +'<td style="padding:4px;color:var(--muted)">'+h+'</td>'
+          +'<td style="padding:4px;text-align:center;color:var(--muted)">'+par+'</td>'
+          +'<td style="padding:4px;text-align:center;">'+lowDisp+'</td>'
+          +'<td style="padding:4px;text-align:center;">'+highDisp+'</td>'
+          +'<td style="padding:4px;text-align:center;">'+posDisp+'</td>'
+          +'<td style="padding:4px;text-align:right;"><span style="'+matchCls+'">'+matchStr+'</span><br><span style="font-size:11px;'+posCls2+'">'+posStr+'</span></td>'
+          +'</tr>';
+      }
+
+      // Final result row — repeat the last hole's running score and positives
+      const last=lastScoredHole(rot);
+      const st=statusLabel(aTotal,bTotal,rot.start,rot.end,last,last);
+      let finalPosA=0, finalPosB=0;
+      for(let h=rot.start;h<=rot.end;h++){
+        const psc=S.scores[h];
+        if(psc){
+          finalPosA+=m.teamA.reduce((s,i)=>s+(+(psc.pos[i])||0),0);
+          finalPosB+=m.teamB.reduce((s,i)=>s+(+(psc.pos[i])||0),0);
+        }
+      }
+      const finalDiff=aTotal-bTotal;
+      const finalPosDiff=finalPosA-finalPosB;
+      let finalMatchStr;
+      if(finalDiff===0) finalMatchStr='All square';
+      else finalMatchStr=teamAName+': '+(finalDiff>0?'+':'')+finalDiff;
+      const finalPosStr='Pos: '+(finalPosDiff>=0?'+':'')+finalPosDiff;
+      const finalMatchCls=finalDiff>0?'color:var(--red);font-weight:700;':finalDiff<0?'color:#2563eb;font-weight:700;':'color:var(--muted);font-weight:700;';
+      const finalPosCls=finalPosDiff>0?'color:var(--red);':finalPosDiff<0?'color:#2563eb;':'color:var(--muted);';
+      tbl.innerHTML+='<tr style="border-top:2px solid var(--border-strong);font-weight:700;background:#f5f3ee;">'
+        +'<td colspan="3" style="padding:5px 4px;font-size:12px;color:var(--muted);">Final</td>'
+        +'<td colspan="3" style="padding:5px 4px;text-align:right;">'
+        +'<span style="'+finalMatchCls+'display:block;">'+finalMatchStr+'</span>'
+        +'<span style="font-size:11px;'+finalPosCls+'display:block;">'+finalPosStr+'</span>'
+        +'</td>'
+        +'</tr>';
+
+      body.appendChild(tbl);
+    });
+
+    card.appendChild(body);
+    wrap.appendChild(card);
   });
 }
 
