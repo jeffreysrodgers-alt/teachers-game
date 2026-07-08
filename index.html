@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Teachers' Game Tracker v. 1.2</title>
+<title>Teachers' Game Tracker v. 1.3</title>
 
 <!-- PWA / Add to Home Screen -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -57,6 +57,7 @@ button:active{transform:scale(.98);}
 .btn-sm{font-size:12px;padding:4px 9px;}
 .chip{font-size:12.5px;padding:6px 11px;}
 .chip.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:600;}
+.chip.pick.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
 .chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
 /* player rows */
 .p-row{display:flex;gap:7px;margin-bottom:7px;align-items:flex-end;}
@@ -128,7 +129,7 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
   html,body{background:#f5f3ee !important;color:#1f2420 !important;}
   .card,.sum-card,.seg-card{background:#fff !important;color:#1f2420 !important;}
   input,select{background:#fff !important;color:#1f2420 !important;}
-  button{background:#fff !important;color:#1f2420 !important;}
+  button:not(.on){background:#fff !important;color:#1f2420 !important;}
   table,td,th{color:#1f2420 !important;}
 }
 </style>
@@ -136,7 +137,7 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
 <body>
 <div class="wrap">
 <h1>The Teachers' Game</h1>
-<p class="sub">Whidbey Golf Club &mdash; v. 1.2</p>
+<p class="sub">Whidbey Golf Club &mdash; v. 1.3</p>
 
 <div class="tabs">
   <button class="tab on"  data-tab="setup">Setup</button>
@@ -712,7 +713,7 @@ function renderPairArea(){
     const used=usedPairs();
     document.getElementById('pair-note').textContent='Fixed pair plays all 3 combos of others. Count ('+rotLeft+' left). Previously paired shown with ⚠';
     nms.forEach((nm,i)=>{
-      const b=document.createElement('button'); b.className='chip'; b.dataset.idx=i;
+      const b=document.createElement('button'); b.className='chip pick'; b.dataset.idx=i;
       b.disabled=counts[i]>=2; if(b.disabled) b.style.opacity='0.38';
       b.innerHTML=nm+' <sup>'+counts[i]+'</sup>';
       b.onclick=()=>{
@@ -740,7 +741,7 @@ function renderPairArea(){
     const used=usedPairs();
     document.getElementById('pair-note').textContent='Pick team A (2 players). Previously paired shown with ⚠';
     nms.forEach((nm,i)=>{
-      const b=document.createElement('button'); b.className='chip'; b.dataset.idx=i; b.textContent=nm;
+      const b=document.createElement('button'); b.className='chip pick'; b.dataset.idx=i; b.textContent=nm;
       b.onclick=()=>{
         if(segP.teamA.includes(i)){
           segP.teamA=segP.teamA.filter(x=>x!==i);
@@ -811,6 +812,9 @@ document.getElementById('rot-add').onclick=()=>{
   const matchups=np()===5
     ?[[rest[0],rest[1]],[rest[0],rest[2]],[rest[1],rest[2]]].map(c=>({teamA:segP.teamA.slice(),teamB:c}))
     :[{teamA:segP.teamA.slice(),teamB:rest}];
+  // If a prior rotation still covers the new starting hole (e.g. the match ended
+  // early), auto-close it at the hole before this one so the new pairing takes over.
+  S.rotations.forEach(rot=>{ if(rot.start<start && rot.end>=start){ rot.end=start-1; } });
   // Lock any previously unlocked rotations before adding the new one
   S.rotations.forEach(rot=>{ if(!rot.locked) rot.locked=true; });
   S.rotations.push({start,end,matchups});
@@ -874,7 +878,7 @@ function renderRotList(){
     // Determine current teamA from first matchup
     let editTeamA=rot.matchups[0].teamA.slice();
     nms.forEach((nm,i)=>{
-      const b=document.createElement('button'); b.className='chip'+(editTeamA.includes(i)?' on':'');
+      const b=document.createElement('button'); b.className='chip pick'+(editTeamA.includes(i)?' on':'');
       b.dataset.idx=i;
       if(np()===5){const cnt=pairCounts();if(cnt[i]>=2&&!editTeamA.includes(i)){b.disabled=true;b.style.opacity='0.38';}}
       b.innerHTML=np()===5?nm+' <sup>'+pairCounts()[i]+'</sup>':nm;
@@ -1160,7 +1164,7 @@ function renderHawkOnScorecard(hole,container){
     tl.textContent='Tied for most losses ($'+Math.abs(minVal).toFixed(2)+'). Pick Hawk:';
     div.appendChild(tl);
     candidates.forEach(i=>{
-      const b=document.createElement('button'); b.className='chip'+(currentHawk===i?' on':'');
+      const b=document.createElement('button'); b.className='chip pick'+(currentHawk===i?' on':'');
       b.textContent=nms[i];
       b.onclick=()=>{
         if(!S.hawkData[hole]) S.hawkData[hole]={};
@@ -1175,7 +1179,7 @@ function renderHawkOnScorecard(hole,container){
   // Mode: partner or pig
   const modeRow=document.createElement('div'); modeRow.className='chip-row';
   [['partner','Pick partner'],['pig','Pig it']].forEach(([key,lbl])=>{
-    const b=document.createElement('button'); b.className='chip'+(hd.mode===key?' on':'');
+    const b=document.createElement('button'); b.className='chip pick'+(hd.mode===key?' on':'');
     b.textContent=lbl;
     b.onclick=()=>{
       if(!S.hawkData[hole]) S.hawkData[hole]={};
@@ -1195,7 +1199,7 @@ function renderHawkOnScorecard(hole,container){
     const pRow=document.createElement('div'); pRow.className='chip-row';
     nms.forEach((nm,i)=>{
       if(i===currentHawk) return;
-      const b=document.createElement('button'); b.className='chip'+(hd.partnerIdx===i?' on':'');
+      const b=document.createElement('button'); b.className='chip pick'+(hd.partnerIdx===i?' on':'');
       b.textContent=nm;
       b.onclick=()=>{S.hawkData[hole].partnerIdx=i; autosave(); renderSCResults();};
       pRow.appendChild(b);
