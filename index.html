@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Teachers' Game Tracker v. 1.3</title>
+<title>Teachers' Game Tracker v. 1.4</title>
 
 <!-- PWA / Add to Home Screen -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -137,7 +137,7 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
 <body>
 <div class="wrap">
 <h1>The Teachers' Game</h1>
-<p class="sub">Whidbey Golf Club &mdash; v. 1.3</p>
+<p class="sub">Whidbey Golf Club &mdash; v. 1.4</p>
 
 <div class="tabs">
   <button class="tab on"  data-tab="setup">Setup</button>
@@ -663,7 +663,11 @@ function nextRotStart(){
 }
 function defRotHoles(idx){
   if(np()===5) return 5;
-  return idx<2?6:5;
+  if(idx<2) return 6;
+  // Last rotation (4-player): if either of the first two ended before 6 holes,
+  // default to 6 rather than 5 to cover the extra holes.
+  const shortEarly=S.rotations.slice(0,2).some(r=>(r.end-r.start+1)<6);
+  return shortEarly?6:5;
 }
 function pairCounts(){
   const c=Array(np()).fill(0);
@@ -1072,7 +1076,7 @@ function renderSCActions(){
       const y=document.createElement('button');
       y.textContent='Yes';y.style.cssText='flex:1;background:var(--accent-bg);color:var(--accent);border-color:var(--accent);font-weight:600;';
       y.onclick=()=>{
-        S.rotations.forEach(r=>{if(r.end>=hole)r.end=hole-1;});
+        S.rotations.forEach(r=>{if(r.end>=hole){r._preHawkEnd=r.end;r.end=hole-1;}});
         S.hawkStart=hole;
         autosave();
         document.querySelector('[data-tab="hawk"]').disabled=false;
@@ -1088,6 +1092,33 @@ function renderSCActions(){
     btn.textContent='🦅 Hawk from H'+S.hawkStart+' — tap hole to enter';
     btn.onclick=()=>go('hawk');
     c.appendChild(btn);
+    // Cancel Hawk (started in error)
+    const cx=document.createElement('button');
+    cx.textContent='✕ Cancel Hawk';
+    cx.style.cssText='flex:0 0 auto;font-size:12px;color:var(--red);border-color:var(--red);';
+    cx.onclick=()=>{
+      c.innerHTML='';
+      const from=S.hawkStart;
+      const cnt=Object.keys(S.hawkData||{}).filter(h=>+h>=from).length;
+      const msg=document.createElement('p'); msg.style.cssText='font-size:13px;margin:0 0 6px;width:100%;';
+      msg.textContent='Cancel Hawk (from H'+from+')'+(cnt?' and clear '+cnt+' entered hawk hole'+(cnt>1?'s':''):'')+'?';
+      c.appendChild(msg);
+      const row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;width:100%;';
+      const y=document.createElement('button');
+      y.textContent='Yes, cancel'; y.style.cssText='flex:1;color:var(--red);border-color:var(--red);font-weight:600;';
+      y.onclick=()=>{
+        Object.keys(S.hawkData||{}).forEach(h=>{ if(+h>=from) delete S.hawkData[h]; });
+        S.rotations.forEach(r=>{ if(r._preHawkEnd!==undefined){ if(r.end===from-1) r.end=r._preHawkEnd; delete r._preHawkEnd; } });
+        S.hawkStart=99; S.hawkIdx=null;
+        const ht=document.querySelector('[data-tab="hawk"]'); if(ht) ht.disabled=true;
+        autosave();
+        renderSCResults(); renderScorecard();
+      };
+      const n=document.createElement('button'); n.textContent='Keep Hawk'; n.style.cssText='flex:1;';
+      n.onclick=()=>renderSCActions();
+      row.appendChild(y); row.appendChild(n); c.appendChild(row);
+    };
+    c.appendChild(cx);
   }
 }
 
