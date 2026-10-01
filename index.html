@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Teachers' Game Tracker v. 1.6</title>
+<title>Teachers' Game Tracker v. 1.7</title>
 
 <!-- PWA / Add to Home Screen -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -82,10 +82,10 @@ button:active{transform:scale(.98);}
 .b-ev{background:#eee;color:var(--muted);padding:2px 7px;border-radius:5px;font-size:12px;font-weight:600;white-space:nowrap;}
 .sn{font-size:11px;color:var(--muted);margin-top:3px;}
 /* summary */
-.sum-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px;}
-.sum-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px;}
-.sum-name{font-size:13px;color:var(--muted);margin-bottom:4px;}
-.sum-total{font-size:22px;font-weight:700;}
+.sum-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-bottom:14px;}
+.sum-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;min-width:0;}
+.sum-name{font-size:12px;color:var(--muted);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sum-total{font-size:clamp(15px,4.6vw,22px);font-weight:700;white-space:nowrap;}
 .pos{color:var(--green);}.neg{color:var(--red);}
 table.det{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;}
 table.det td,table.det th{padding:5px 4px;border-bottom:1px solid var(--border);}
@@ -137,7 +137,7 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
 <body>
 <div class="wrap">
 <h1>The Teachers' Game</h1>
-<p class="sub">Whidbey Golf Club &mdash; v. 1.6</p>
+<p class="sub">Whidbey Golf Club &mdash; v. 1.7 &middot; b9</p>
 
 <div class="tabs">
   <button class="tab on"  data-tab="setup">Setup</button>
@@ -148,6 +148,7 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
 
 <!-- SETUP -->
 <div class="panel on" id="panel-setup">
+  <div id="recovery-slot"></div>
   <div class="card">
     <p class="muted">Players (4 or 5) — name &amp; course handicap</p>
     <div id="p-inputs"></div>
@@ -183,6 +184,7 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
       <select id="start-hole"></select>
     </div>
     <button class="btn-primary" id="start-btn" style="margin-top:4px;">Start round</button>
+    <div id="start-confirm"></div>
   </div>
 </div>
 
@@ -253,6 +255,7 @@ table.det td:last-child,table.det th:last-child{text-align:right;}
   </div>
   <div class="sum-grid" id="sum-cards"></div>
   <div id="sum-detail"></div>
+  <div id="stakes-slot"></div>
 </div>
 </div><!-- .wrap -->
 
@@ -598,6 +601,7 @@ function go(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.getElementById('panel-'+tab).classList.add('on');
   document.querySelector('[data-tab="'+tab+'"]').classList.add('on');
+  if(tab==='setup')     syncSetup();
   if(tab==='rotations') renderRotations();
   if(tab==='scorecard') renderScorecard();
   if(tab==='results')   renderResults();
@@ -640,6 +644,19 @@ document.getElementById('add-p').onclick=()=>{if(np()<5){S.players.push({name:''
 document.getElementById('rm-p').onclick=()=>{if(np()>4){S.players.pop();renderPInputs();}};
 renderPInputs();
 
+// Make the Setup form reflect the current state (e.g. when opened during a round in progress)
+function syncSetup(){
+  const hc=document.getElementById('hole-count'); if(hc) hc.value=S.holes;
+  if(typeof fillStartHole==='function') fillStartHole();
+  const alt=document.getElementById('alt-start'), wrap=document.getElementById('start-hole-wrap'), sh=document.getElementById('start-hole');
+  if(alt) alt.checked=S.startHole>1;
+  if(wrap) wrap.style.display=(S.startHole>1)?'block':'none';
+  if(sh && S.startHole>1) sh.value=S.startHole;
+  renderPInputs(); renderSiGrid();
+  const mv=document.getElementById('match-val'); if(mv) mv.value=S.matchVal;
+  const pv=document.getElementById('pos-val'); if(pv) pv.value=S.posVal;
+}
+
 function renderSiGrid(){
   ['front','back'].forEach(side=>{
     const el=document.getElementById('si-'+side); el.innerHTML='';
@@ -655,7 +672,7 @@ function renderSiGrid(){
 }
 renderSiGrid();
 
-document.getElementById('start-btn').onclick=()=>{
+function doStartRound(){
   S.holes=+document.getElementById('hole-count').value;
   const altStart=document.getElementById('alt-start').checked;
   S.startHole=altStart?(+document.getElementById('start-hole').value||1):1;
@@ -665,6 +682,27 @@ document.getElementById('start-btn').onclick=()=>{
   S.rotations=[]; S.scores={}; S.hawkData={}; S.curHole=1;
   autosave();
   ['rotations','scorecard','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=false);
+  const sc=document.getElementById('start-confirm'); if(sc) sc.innerHTML='';
+  go('rotations');
+}
+document.getElementById('start-btn').onclick=()=>{
+  let _cur=null; try{ _cur=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); }catch(e){}
+  if(_cur && _cur.started){
+    const sc=document.getElementById('start-confirm');
+    if(!sc){ doStartRound(); return; }
+    sc.innerHTML='';
+    const m=document.createElement('p'); m.style.cssText='font-size:12.5px;color:var(--gold);font-weight:600;margin:10px 0 6px;';
+    m.textContent='A round is already in progress. Start a new one? The current round will be moved to Backups.';
+    const row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;';
+    const yes=document.createElement('button'); yes.textContent='Yes, start new';
+    yes.style.cssText='flex:1;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;';
+    yes.onclick=()=>{ archiveCurrent(); renderRecovery(); doStartRound(); };
+    const no=document.createElement('button'); no.textContent='Cancel'; no.style.cssText='flex:1;';
+    no.onclick=()=>{ sc.innerHTML=''; };
+    row.appendChild(yes); row.appendChild(no); sc.appendChild(m); sc.appendChild(row);
+    return;
+  }
+  doStartRound();
 };
 
 // ─── ROTATIONS ────────────────────────────────────────────────────────────────
@@ -703,11 +741,14 @@ function pairCounts(){
   return c;
 }
 
+function ord(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);}
 function renderRotations(){
   const hawk=S.hawkStart<=S.holes;
-  document.getElementById('rot-status').textContent=hawk
-    ?'Hawk from hole '+S.hawkStart:'Hawk not started';
-  document.getElementById('new-rot-card').style.display=hawk?'none':'block';
+  const full=S.rotations.length>=3;
+  document.getElementById('rot-status').textContent=
+    hawk ? 'Hawk from hole '+S.hawkStart
+         : (full ? 'All 3 rotations set · Hawk not started' : 'Hawk not started');
+  document.getElementById('new-rot-card').style.display=(hawk||full)?'none':'block';
   const start=nextRotStart();
   const numHoles=defRotHoles(S.rotations.length);
   const fs=document.getElementById('rot-from'),fn=document.getElementById('rot-num');
@@ -737,13 +778,15 @@ function usedPairs(){
 
 function pairKey(a,b){ return Math.min(a,b)+'-'+Math.max(a,b); }
 
-function renderPairArea(){
-  const nms=ns(), area=document.getElementById('pair-area');
+function renderPairArea(area, noteEl){
+  const nms=ns();
+  area = area || document.getElementById('pair-area');
+  noteEl = noteEl || document.getElementById('pair-note');
   area.innerHTML=''; segP={teamA:[]};
   if(np()===5){
     const counts=pairCounts(), rotLeft=3-S.rotations.length;
     const used=usedPairs();
-    document.getElementById('pair-note').textContent='Fixed pair plays all 3 combos of others. Count ('+rotLeft+' left). Previously paired shown with ⚠';
+    noteEl.textContent='Fixed pair plays all 3 combos of others. Count ('+rotLeft+' left). Previously paired shown with ⚠';
     nms.forEach((nm,i)=>{
       const b=document.createElement('button'); b.className='chip pick'; b.dataset.idx=i;
       b.disabled=counts[i]>=2; if(b.disabled) b.style.opacity='0.38';
@@ -771,7 +814,7 @@ function renderPairArea(){
   } else {
     // 4-player: track used pairs and warn
     const used=usedPairs();
-    document.getElementById('pair-note').textContent='Pick team A (2 players). Previously paired shown with ⚠';
+    noteEl.textContent='Pick team A (2 players). Previously paired shown with ⚠';
     nms.forEach((nm,i)=>{
       const b=document.createElement('button'); b.className='chip pick'; b.dataset.idx=i; b.textContent=nm;
       b.onclick=()=>{
@@ -801,46 +844,82 @@ function renderPairArea(){
       area.appendChild(b);
     });
   }
+  // Pre-select a sensible pairing for the 3rd (final) rotation
+  if(S.rotations.length===2){
+    const idx=nms.map((_,i)=>i);
+    let pick=[];
+    if(np()===5){
+      // players who have never been the fixed pair yet
+      const counts=pairCounts();
+      const zero=idx.filter(i=>counts[i]===0);
+      if(zero.length>=2){ pick=zero.slice(0,2); }
+      else {
+        const avail=idx.filter(i=>counts[i]<2).sort((a,b)=>counts[a]-counts[b]);
+        zero.concat(avail).forEach(i=>{ if(pick.length<2 && !pick.includes(i)) pick.push(i); });
+      }
+    } else {
+      // a pair that hasn't been partners — prefer one whose complement is also fresh
+      const used=usedPairs();
+      for(let a=0;a<idx.length && pick.length<2;a++){
+        for(let b=a+1;b<idx.length;b++){
+          if(used.has(pairKey(a,b))) continue;
+          const rest=idx.filter(x=>x!==a&&x!==b);
+          if(rest.length===2 && !used.has(pairKey(rest[0],rest[1]))){ pick=[a,b]; break; }
+        }
+      }
+      if(pick.length<2){
+        for(let a=0;a<idx.length && pick.length<2;a++){
+          for(let b=a+1;b<idx.length;b++){
+            if(!used.has(pairKey(a,b))){ pick=[a,b]; break; }
+          }
+        }
+      }
+    }
+    if(pick.length===2){
+      segP.teamA=pick.slice();
+      pick.forEach(i=>{ const b=area.querySelector('button[data-idx="'+i+'"]'); if(b) b.classList.add('on'); });
+    }
+  }
 }
 
 function rotErr(msg){const e=document.getElementById('rot-err');e.textContent=msg;e.style.display=msg?'block':'none';}
 
-document.getElementById('rot-add').onclick=()=>{
+function commitRotation(){
   const nms=ns();
+  if(S.rotations.length>=3){return{ok:false,msg:'All 3 rotations are already set.'};}
   const startPhys=+document.getElementById('rot-from').value;
   const numHoles=+document.getElementById('rot-num').value;
-  if(!startPhys||!numHoles||isNaN(startPhys)||isNaN(numHoles)||numHoles<1){rotErr('Enter a valid starting hole and number of holes.');return;}
+  if(!startPhys||!numHoles||isNaN(startPhys)||isNaN(numHoles)||numHoles<1){return{ok:false,msg:'Enter a valid starting hole and number of holes.'};}
   const start=seqOf(startPhys);
   const end=start+numHoles-1;
-  if(S.hawkStart<=S.holes&&end>=S.hawkStart){rotErr('Must end before Hawk hole '+physHole(S.hawkStart)+'.');return;}
-  if(segP.teamA.length!==2){rotErr('Pick exactly 2 players for the pairing.');return;}
+  if(S.hawkStart<=S.holes&&end>=S.hawkStart){return{ok:false,msg:'Must end before Hawk hole '+physHole(S.hawkStart)+'.'};}
+  if(segP.teamA.length!==2){return{ok:false,msg:'Pick exactly 2 players for the pairing.'};}
   // 4-player: check for repeated partnerships on both teams
   if(np()===4){
     const used=usedPairs();
     const allIdx=ns().map((_,i)=>i), rest=allIdx.filter(i=>!segP.teamA.includes(i));
     const teamA=segP.teamA, teamB=rest;
     if(used.has(pairKey(teamA[0],teamA[1]))){
-      rotErr(ns()[teamA[0]]+' & '+ns()[teamA[1]]+' have already been partners this round.');return;
+      return{ok:false,msg:ns()[teamA[0]]+' & '+ns()[teamA[1]]+' have already been partners this round.'};
     }
     if(used.has(pairKey(teamB[0],teamB[1]))){
-      rotErr(ns()[teamB[0]]+' & '+ns()[teamB[1]]+' have already been partners this round.');return;
+      return{ok:false,msg:ns()[teamB[0]]+' & '+ns()[teamB[1]]+' have already been partners this round.'};
     }
   }
   if(np()===5){
     const counts=pairCounts(),rotLeft=3-S.rotations.length;
-    for(let i=0;i<np();i++){if(segP.teamA.includes(i)&&counts[i]>=2){rotErr(nms[i]+' already on pair 2×.');return;}}
+    for(let i=0;i<np();i++){if(segP.teamA.includes(i)&&counts[i]>=2){return{ok:false,msg:nms[i]+' already on pair 2×.'};}}
     if(rotLeft===1){
       const must=nms.map((_,i)=>i).filter(i=>counts[i]===0);
-      for(const i of must){if(!segP.teamA.includes(i)){rotErr(nms[i]+' must be on pair this rotation.');return;}}
+      for(const i of must){if(!segP.teamA.includes(i)){return{ok:false,msg:nms[i]+' must be on pair this rotation.'};}}
     }
     // Check fixed pair hasn't already been together
     const used=usedPairs();
     const [a,b]=segP.teamA;
     if(used.has(pairKey(a,b))){
-      rotErr(nms[a]+' & '+nms[b]+' have already been partners this round.');return;
+      return{ok:false,msg:nms[a]+' & '+nms[b]+' have already been partners this round.'};
     }
   }
-  rotErr('');
   const allIdx=nms.map((_,i)=>i), rest=allIdx.filter(i=>!segP.teamA.includes(i));
   const matchups=np()===5
     ?[[rest[0],rest[1]],[rest[0],rest[2]],[rest[1],rest[2]]].map(c=>({teamA:segP.teamA.slice(),teamB:c}))
@@ -852,6 +931,12 @@ document.getElementById('rot-add').onclick=()=>{
   S.rotations.forEach(rot=>{ if(!rot.locked) rot.locked=true; });
   S.rotations.push({start,end,matchups});
   autosave();
+  return{ok:true};
+}
+document.getElementById('rot-add').onclick=()=>{
+  const r=commitRotation();
+  if(!r.ok){ rotErr(r.msg); return; }
+  rotErr('');
   document.getElementById('rot-from').value=''; document.getElementById('rot-num').value='';
   renderRotations();
 };
@@ -862,7 +947,7 @@ function renderRotList(){
   S.rotations.forEach((rot,ri)=>{
     const card=document.createElement('div'); card.className='seg-card';
     const t=document.createElement('p'); t.style.cssText='font-size:14px;font-weight:600;margin-bottom:5px;';
-    t.textContent='Rotation '+(ri+1)+': Holes '+physHole(rot.start)+'–'+physHole(rot.end);
+    t.textContent=ord(ri+1)+' Rotation · Holes '+physHole(rot.start)+'–'+physHole(rot.end);
     card.appendChild(t);
     rot.matchups.forEach(m=>{
       const r=rotRunning(m,rot.start,rot.end,rot.end);
@@ -978,7 +1063,7 @@ function renderScorecard(){
   document.getElementById('sc-hole-lbl').textContent='Hole '+physHole(hole)+' — Par '+par;
   document.getElementById('sc-hole-sub').textContent=
     inHawk?'Hawk · SI '+si
-    :rot?'Rotation '+physHole(rot.start)+'–'+physHole(rot.end)+' · SI '+si
+    :rot?ord(S.rotations.indexOf(rot)+1)+' Rotation · Holes '+physHole(rot.start)+'–'+physHole(rot.end)+' · SI '+si
     :'No rotation · SI '+si;
   renderSCActions();
   renderSCTable();
@@ -1067,47 +1152,37 @@ function renderSCActions(){
   const c=document.getElementById('sc-actions'); c.innerHTML='';
   if(inHawk) return; // no actions during hawk — hawk handled in results
 
-  // End rotation early
-  if(rot&&hole>rot.start&&!rot.locked){
+  // The active rotation is finished when nothing covers this hole, or all its matches are decided.
+  const activeDone = !rot || (!rot.locked && allOver(rot));
+  // Where the next segment (rotation or hawk) should begin — right after the last scored hole.
+  const nextStart = rot ? lastScoredHole(rot)+1 : hole;
+
+  // Start next rotation — only when the current rotation is finished, capped at 3
+  if(activeDone && S.rotations.length<3){
     const btn=document.createElement('button');
     btn.style.cssText='flex:1;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;font-size:12.5px;';
-    btn.textContent='End rotation after H'+physHole(hole);
-    btn.onclick=()=>{
-      c.innerHTML='';
-      const msg=document.createElement('p'); msg.style.cssText='font-size:13px;margin:0 0 6px;width:100%;';
-      msg.textContent='End rotation '+physHole(rot.start)+'–'+physHole(rot.end)+' here?';
-      c.appendChild(msg);
-      const row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;width:100%;';
-      const y=document.createElement('button');
-      y.textContent='Yes';y.style.cssText='flex:1;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;';
-      y.onclick=()=>{
-        rot.end=hole; rot.locked=true; autosave();
-        document.getElementById('rot-from').value=''; document.getElementById('rot-to').value='';
-        go('rotations');
-      };
-      const n=document.createElement('button'); n.textContent='Cancel'; n.style.cssText='flex:1;';
-      n.onclick=()=>renderSCActions();
-      row.appendChild(y); row.appendChild(n); c.appendChild(row);
-    };
+    btn.textContent='Start next rotation (H'+physHole(nextStart)+')';
+    btn.onclick=()=>openInlineRotation(nextStart);
     c.appendChild(btn);
   }
 
-  // Start Hawk
+  // Start Hawk — only after all 3 rotations have ended (no rotation covers this hole)
   if(S.hawkStart>S.holes){
+   if(activeDone && S.rotations.length>=3){
     const btn=document.createElement('button');
     btn.style.cssText='flex:1;background:var(--accent-bg);color:var(--accent);border-color:var(--accent);font-weight:600;font-size:12.5px;';
-    btn.textContent='Start Hawk here (H'+physHole(hole)+')';
+    btn.textContent='Start Hawk here (H'+physHole(nextStart)+')';
     btn.onclick=()=>{
       c.innerHTML='';
       const msg=document.createElement('p'); msg.style.cssText='font-size:13px;margin:0 0 6px;width:100%;';
-      msg.textContent='Start Hawk from hole '+physHole(hole)+'?';
+      msg.textContent='Start Hawk from hole '+physHole(nextStart)+'?';
       c.appendChild(msg);
       const row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;width:100%;';
       const y=document.createElement('button');
       y.textContent='Yes';y.style.cssText='flex:1;background:var(--accent-bg);color:var(--accent);border-color:var(--accent);font-weight:600;';
       y.onclick=()=>{
-        S.rotations.forEach(r=>{if(r.end>=hole){r._preHawkEnd=r.end;r.end=hole-1;}});
-        S.hawkStart=hole;
+        S.rotations.forEach(r=>{if(r.end>=nextStart){r._preHawkEnd=r.end;r.end=nextStart-1;}});
+        S.hawkStart=nextStart;
         autosave();
         renderSCResults(); renderScorecard();
       };
@@ -1116,6 +1191,7 @@ function renderSCActions(){
       row.appendChild(y); row.appendChild(n); c.appendChild(row);
     };
     c.appendChild(btn);
+   }
   } else {
     const btn=document.createElement('button'); btn.style.cssText='flex:1;font-size:12px;';
     btn.textContent='🦅 Hawk from H'+physHole(S.hawkStart)+' · view totals';
@@ -1165,6 +1241,57 @@ function showHawkPicker(candidates,money,cb){
   c.appendChild(row);
 }
 
+function openInlineRotation(hole){
+  const c=document.getElementById('sc-actions'); c.innerHTML='';
+  const rot=segForHole(hole);
+  const rotNo=S.rotations.length+1;                // this will be the Nth rotation
+  const defHoles=defRotHoles(S.rotations.length);  // standard length (5 or 6 by player count)
+  const box=document.createElement('div');
+  box.style.cssText='width:100%;background:var(--gold-bg);border:1px solid var(--gold);border-radius:8px;padding:11px 12px;';
+  const title=document.createElement('p');
+  title.style.cssText='font-size:13px;font-weight:700;color:var(--gold);margin:0 0 2px;';
+  title.textContent='Start '+ord(rotNo)+' rotation — from hole '+physHole(hole);
+  const sub=document.createElement('p');
+  sub.style.cssText='font-size:11.5px;color:var(--muted);margin:0 0 8px;';
+  sub.textContent='Hole '+physHole(hole)+' onward uses the new pairing'
+    +(rot?'; rotation '+physHole(rot.start)+'–'+physHole(rot.end)+' ends at hole '+physHole(hole-1):'')+'.';
+  const note=document.createElement('p'); note.style.cssText='font-size:11px;color:var(--muted);margin:0 0 6px;';
+  const area=document.createElement('div'); area.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;';
+  const err=document.createElement('p'); err.style.cssText='display:none;color:var(--red);font-size:12px;margin:0 0 6px;';
+  const holesRow=document.createElement('div'); holesRow.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+  const hLbl=document.createElement('span'); hLbl.style.cssText='font-size:12px;color:var(--muted);'; hLbl.textContent='Length (holes):';
+  const hInp=document.createElement('input'); hInp.type='number'; hInp.min='1'; hInp.value=defHoles; hInp.style.cssText='width:64px;';
+  holesRow.appendChild(hLbl); holesRow.appendChild(hInp);
+  const rowb=document.createElement('div'); rowb.style.cssText='display:flex;gap:6px;width:100%;';
+  const create=document.createElement('button');
+  create.textContent='Create rotation';
+  create.style.cssText='flex:1;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;';
+  const tab=document.createElement('button');
+  tab.textContent='Rotations tab'; tab.title='Set it up on the Rotations tab instead';
+  tab.style.cssText='flex:0 0 auto;font-size:12px;';
+  const cancel=document.createElement('button');
+  cancel.textContent='Cancel'; cancel.style.cssText='flex:0 0 auto;font-size:12px;';
+  box.appendChild(title); box.appendChild(sub); box.appendChild(note); box.appendChild(area); box.appendChild(holesRow); box.appendChild(err);
+  rowb.appendChild(create); rowb.appendChild(tab); rowb.appendChild(cancel); box.appendChild(rowb);
+  c.appendChild(box);
+  // Reuse the Rotations-tab partner picker (incl. repeat warnings) right here.
+  renderPairArea(area, note);
+  create.onclick=()=>{
+    document.getElementById('rot-from').value=physHole(hole);
+    document.getElementById('rot-num').value=hInp.value;
+    const r=commitRotation();
+    if(!r.ok){ err.textContent=r.msg; err.style.display='block'; return; }
+    document.getElementById('rot-from').value=''; document.getElementById('rot-num').value='';
+    renderRotations();     // keep the (hidden) Rotations tab in sync
+    renderScorecard();     // refresh Score Entry header/actions/table/results
+  };
+  tab.onclick=()=>{
+    document.getElementById('rot-from').value=physHole(hole);
+    document.getElementById('rot-num').value='';
+    go('rotations');
+  };
+  cancel.onclick=()=>renderSCActions();
+}
 function renderSCResults(){
   const hole=S.curHole, nms=ns(), inHawk=hole>=S.hawkStart;
   const c=document.getElementById('sc-results'); c.innerHTML='';
@@ -1269,13 +1396,32 @@ function renderHawkOnScorecard(hole,container){
 
   // Result is computed from the scores entered (no manual win/lose/push override).
 
-  // Running hawk money
-  const hm=totalHawkMoney();
-  const pg=document.createElement('div'); pg.className='pts-mini'; pg.style.marginTop='8px';
+  // $ won/lost on THIS hole — resets to 0 when you advance, until scores are entered.
+  const hh=hawkHoleMoney(hole);
+  const hlbl=document.createElement('p'); hlbl.className='sn';
+  hlbl.style.cssText='margin-top:10px;margin-bottom:3px;font-weight:600;';
+  hlbl.textContent='This hole (H'+physHole(hole)+') — $ won/lost';
+  div.appendChild(hlbl);
+  const hg=document.createElement('div'); hg.className='pts-mini';
   nms.forEach((nm,i)=>{
     const pc=document.createElement('div'); pc.className='pts-card';
-    const cls=hm[i]>0?'pos':hm[i]<0?'neg':'';
-    pc.innerHTML='<p class="pts-nm">'+nm+'</p><p class="pts-v '+cls+'">'+(hm[i]>=0?'+':'')+hm[i].toFixed(2)+'</p>';
+    const cls=hh[i]>0?'pos':hh[i]<0?'neg':'';
+    pc.innerHTML='<p class="pts-nm">'+nm+'</p><p class="pts-v '+cls+'">'+(hh[i]>=0?'+':'-')+'$'+Math.abs(hh[i]).toFixed(2)+'</p>';
+    hg.appendChild(pc);
+  });
+  div.appendChild(hg);
+
+  // Overall $ won/lost so far (rotations + hawk) — so the Hawk can see where everyone stands.
+  const tot=settledMoney();
+  const olbl=document.createElement('p'); olbl.className='sn';
+  olbl.style.cssText='margin-top:10px;margin-bottom:3px;font-weight:600;color:var(--gold);';
+  olbl.textContent='Overall standings — $ won/lost';
+  div.appendChild(olbl);
+  const pg=document.createElement('div'); pg.className='pts-mini';
+  nms.forEach((nm,i)=>{
+    const pc=document.createElement('div'); pc.className='pts-card';
+    const cls=tot[i]>0?'pos':tot[i]<0?'neg':'';
+    pc.innerHTML='<p class="pts-nm">'+nm+'</p><p class="pts-v '+cls+'">'+(tot[i]>=0?'+':'-')+'$'+Math.abs(tot[i]).toFixed(2)+'</p>';
     pg.appendChild(pc);
   });
   div.appendChild(pg);
@@ -1575,7 +1721,7 @@ function renderPlayerResults(container){
       const mCls=rotMatch>0?'color:var(--green)':rotMatch<0?'color:var(--red)':'';
       const pCls=rotPos>0?'color:var(--green)':rotPos<0?'color:var(--red)':'';
       const tCls=rotTotal>0?'color:var(--green)':rotTotal<0?'color:var(--red)':'';
-      html+='<tr><td>Rotation '+(ri+1)+'</td>'
+      html+='<tr><td>'+ord(ri+1)+' Rotation</td>'
         +'<td style="text-align:right;font-weight:600;'+mCls+'">'+(rotMatch>=0?'+':'')+rotMatch.toFixed(2)+'</td>'
         +'<td style="text-align:right;font-weight:600;'+pCls+'">'+(rotPos>=0?'+':'')+rotPos.toFixed(2)+'</td>'
         +'<td style="text-align:right;font-weight:600;'+tCls+'">'+(rotTotal>=0?'+':'')+rotTotal.toFixed(2)+'</td>'
@@ -1595,13 +1741,51 @@ function renderPlayerResults(container){
   container.innerHTML=html;
 }
 
+function commitStakes(){
+  saveState();
+  const mv=document.getElementById('match-val'); if(mv) mv.value=S.matchVal;
+  const pv=document.getElementById('pos-val'); if(pv) pv.value=S.posVal;
+  renderSummary();
+}
+let _stakesOpen=false;
+function renderStakes(){
+  const slot=document.getElementById('stakes-slot'); if(!slot) return;
+  if(!S.started){ slot.innerHTML=''; return; }
+  const card=document.createElement('div'); card.className='card';
+  card.style.cssText='padding:10px 12px;margin-top:12px;';
+  const h=document.createElement('div');
+  h.style.cssText='display:flex;justify-content:space-between;align-items:center;cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);';
+  const hLabel=document.createElement('span');
+  hLabel.textContent='Stakes — $'+(+S.matchVal)+'/match · $'+(+S.posVal)+'/pt';
+  const caret=document.createElement('span'); caret.textContent=_stakesOpen?'▴':'▸';
+  h.appendChild(hLabel); h.appendChild(caret);
+  const body=document.createElement('div'); body.style.display=_stakesOpen?'block':'none'; body.style.marginTop='9px';
+  const note=document.createElement('p'); note.style.cssText='font-size:11px;color:var(--muted);margin-bottom:8px;';
+  note.textContent='Change anytime — payouts update live, no reset.';
+  const row=document.createElement('div'); row.style.cssText='display:flex;gap:10px;';
+  function field(labelText,val,step,commit){
+    const wrap=document.createElement('div'); wrap.style.flex='1';
+    const l=document.createElement('label'); l.className='lbl'; l.textContent=labelText;
+    const inp=document.createElement('input'); inp.type='number'; inp.min='0'; inp.step=step;
+    inp.value=val; inp.style.width='100%';
+    inp.onchange=()=>commit(inp.value);
+    wrap.appendChild(l); wrap.appendChild(inp); return wrap;
+  }
+  row.appendChild(field('$ per match win',S.matchVal,'0.5',v=>{S.matchVal=+v||0;commitStakes();}));
+  row.appendChild(field('$ per positive pt',S.posVal,'0.25',v=>{S.posVal=+v||0;commitStakes();}));
+  h.onclick=()=>{ _stakesOpen=!_stakesOpen; body.style.display=_stakesOpen?'block':'none'; caret.textContent=_stakesOpen?'▴':'▸'; };
+  body.appendChild(note); body.appendChild(row);
+  slot.innerHTML=''; card.appendChild(h); card.appendChild(body); slot.appendChild(card);
+}
 function renderSummary(){
+  renderStakes();
   const nms=ns(), tot=totalMoney(), settled=settledMoney(), rm=rotationMoney(), hm=totalHawkMoney();
   const mv=S.matchVal;
 
   // Verify zero-sum
   const sum=tot.reduce((a,b)=>a+b,0);
   const cards=document.getElementById('sum-cards'); cards.innerHTML='';
+  cards.style.gridTemplateColumns='repeat('+nms.length+',minmax(0,1fr))';
 
   // Check if any rotation is in progress (started but not complete)
   const anyPending=S.rotations.some(rot=>{
@@ -1649,7 +1833,7 @@ function renderSummary(){
       const posAmt=Math.abs(pd)*S.posVal;
       if(pd!==0) rotTotal+=(pd>0?m.teamA.length:m.teamB.length)*posAmt-(pd>0?m.teamB.length:m.teamA.length)*posAmt;
     });
-    if(Math.abs(rotTotal)>0.01) auditErrors.push('Rotation '+(ri+1)+' off by $'+rotTotal.toFixed(2));
+    if(Math.abs(rotTotal)>0.01) auditErrors.push(ord(ri+1)+' Rotation off by $'+rotTotal.toFixed(2));
   });
   // Per hawk hole
   Object.keys(S.hawkData).map(Number).sort((a,b)=>a-b).forEach(h=>{
@@ -1713,6 +1897,103 @@ function clearSave(){
   try { localStorage.removeItem(SAVE_KEY); } catch(e){}
 }
 
+// ─── ROUND BACKUPS (keep last 5 discarded rounds) ─────────────────────────────
+const ARCHIVE_KEY = 'teachers_game_archive';
+const MAX_ARCHIVE = 5;
+function loadArchive(){
+  try { const a=JSON.parse(localStorage.getItem(ARCHIVE_KEY)||'[]'); return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+function saveArchive(arr){
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(arr.slice(0,MAX_ARCHIVE))); } catch(e){}
+}
+// Move whatever round is currently saved (if it's a real started round) into backups, newest first.
+function archiveCurrent(){
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    if(!saved || !saved.started) return;
+    const arr = loadArchive();
+    if(arr[0] && arr[0]._savedAt===saved._savedAt) return; // dedupe exact same snapshot
+    saved._arcId = 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    arr.unshift(saved);
+    saveArchive(arr);
+  } catch(e){}
+}
+function archiveHolesPlayed(a){
+  let n=0;
+  if(a && a.scores){ for(const k in a.scores){ const g=a.scores[k]&&a.scores[k].gross; if(g && g.some(v=>v!=='' && v!=null)) n++; } }
+  return n;
+}
+let _recoveryOpen=false;
+function renderRecovery(){
+  const slot=document.getElementById('recovery-slot'); if(!slot) return;
+  const arr=loadArchive();
+  if(!arr.length){ slot.innerHTML=''; return; }
+  const card=document.createElement('div'); card.className='card';
+  card.style.cssText='border:1px solid var(--gold);background:var(--gold-bg);';
+  const h=document.createElement('div');
+  h.style.cssText='display:flex;justify-content:space-between;align-items:center;cursor:pointer;font-size:13px;font-weight:700;color:var(--gold);';
+  const hLabel=document.createElement('span'); hLabel.textContent='⟲ Recover a previous round ('+arr.length+')';
+  const caret=document.createElement('span'); caret.textContent=_recoveryOpen?'▴':'▸';
+  h.appendChild(hLabel); h.appendChild(caret);
+  const body=document.createElement('div'); body.style.display=_recoveryOpen?'block':'none'; body.style.marginTop='9px';
+  const sub=document.createElement('p');
+  sub.style.cssText='font-size:11.5px;color:var(--muted);margin-bottom:9px;';
+  sub.textContent='The last '+MAX_ARCHIVE+' discarded rounds are kept here in case a new round was started by mistake.';
+  h.onclick=()=>{ _recoveryOpen=!_recoveryOpen; body.style.display=_recoveryOpen?'block':'none'; caret.textContent=_recoveryOpen?'▴':'▸'; };
+  card.appendChild(h); body.appendChild(sub);
+  arr.forEach(a=>{
+    const names=(a.players||[]).map(p=>p&&p.name).filter(Boolean);
+    const who=names.length?names.join(', '):'Unnamed players';
+    const when=a._savedAt?new Date(a._savedAt).toLocaleString():'unknown time';
+    const played=archiveHolesPlayed(a);
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--gold);';
+    const info=document.createElement('div'); info.style.cssText='min-width:0;flex:1;';
+    const l1=document.createElement('div'); l1.style.cssText='font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'; l1.textContent=who;
+    const l2=document.createElement('div'); l2.style.cssText='font-size:11px;color:var(--muted);'; l2.textContent=played+' hole'+(played===1?'':'s')+' played · '+when;
+    info.appendChild(l1); info.appendChild(l2);
+    const btns=document.createElement('div'); btns.style.cssText='display:flex;gap:6px;flex-shrink:0;';
+    const rBtn=document.createElement('button'); rBtn.textContent='Restore';
+    rBtn.style.cssText='font-size:12px;padding:5px 11px;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;';
+    rBtn.onclick=()=>restoreArchive(a._arcId);
+    const dBtn=document.createElement('button'); dBtn.textContent='✕';
+    dBtn.title='Delete this backup'; dBtn.style.cssText='font-size:12px;padding:5px 9px;color:var(--danger,#c0392b);';
+    dBtn.onclick=()=>{
+      btns.innerHTML='';
+      const yes=document.createElement('button'); yes.textContent='Delete';
+      yes.style.cssText='font-size:12px;padding:5px 10px;color:#fff;background:var(--danger,#c0392b);border-color:var(--danger,#c0392b);font-weight:600;';
+      yes.onclick=()=>deleteArchive(a._arcId);
+      const no=document.createElement('button'); no.textContent='Keep'; no.style.cssText='font-size:12px;padding:5px 10px;';
+      no.onclick=()=>renderRecovery();
+      btns.appendChild(yes); btns.appendChild(no);
+    };
+    btns.appendChild(rBtn); btns.appendChild(dBtn);
+    row.appendChild(info); row.appendChild(btns);
+    body.appendChild(row);
+  });
+  card.appendChild(body);
+  slot.innerHTML=''; slot.appendChild(card);
+}
+function restoreArchive(arcId){
+  const a=loadArchive().find(x=>x._arcId===arcId);
+  if(!a) return;
+  archiveCurrent();                                    // protect whatever is active now
+  saveArchive(loadArchive().filter(x=>x._arcId!==arcId)); // remove the one being restored
+  Object.assign(S, a);
+  saveState();
+  ['rotations','scorecard','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=false);
+  renderRecovery();
+  const b=document.querySelector('.wrap>div[data-resume-banner]'); if(b) b.remove();
+  go('scorecard'); renderScorecard();
+}
+function deleteArchive(arcId){
+  saveArchive(loadArchive().filter(x=>x._arcId!==arcId));
+  renderRecovery();
+}
+
 // Patch all state-mutating spots to auto-save
 // We wrap the key render functions that follow user input
 const _origRenderScorecard = renderScorecard;
@@ -1727,24 +2008,17 @@ function autosave(){ saveState(); }
     ['rotations','scorecard','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=false);
     // Show resume banner
     const banner=document.createElement('div');
+    banner.setAttribute('data-resume-banner','1');
     banner.style.cssText='background:var(--gold-bg);border:1px solid var(--gold);border-radius:8px;padding:11px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;';
     const msg=document.createElement('span');
     msg.style.cssText='font-size:13px;color:var(--gold);font-weight:600;';
     const dateStr=S._savedAt?new Date(S._savedAt).toLocaleString():'';
     msg.textContent='⏱ Round in progress'+(dateStr?' · saved '+dateStr:'')+'. Resume or start new?';
     const btnRow=document.createElement('div'); btnRow.style.cssText='display:flex;gap:7px;flex-shrink:0;';
-    const resumeBtn=document.createElement('button');
-    resumeBtn.textContent='Resume'; resumeBtn.style.cssText='font-size:12px;padding:5px 11px;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;';
-    resumeBtn.onclick=()=>{
-      banner.remove();
-      // Go to scorecard at current hole
-      go('scorecard'); renderScorecard();
-    };
-    const newBtn=document.createElement('button');
-    newBtn.textContent='New round'; newBtn.style.cssText='font-size:12px;padding:5px 11px;';
-    newBtn.onclick=()=>{
+    const defaultMsg='⏱ Round in progress'+(dateStr?' · saved '+dateStr:'')+'. Resume or start new?';
+    function doNewRound(){
+      archiveCurrent();
       clearSave();
-      // Reset state to defaults
       Object.assign(S,{
         players:[{name:'',hcp:0},{name:'',hcp:0},{name:'',hcp:0},{name:'',hcp:0}],
         si:SI.slice(),par:PAR.slice(),holes:18,started:false,
@@ -1753,13 +2027,35 @@ function autosave(){ saveState(); }
       });
       ['rotations','scorecard','summary'].forEach(t=>document.querySelector('[data-tab="'+t+'"]').disabled=true);
       document.querySelector('[data-tab="setup"]').disabled=false;
-      go('setup'); renderPInputs(); renderSiGrid();
+      go('setup'); renderPInputs(); renderSiGrid(); renderRecovery();
       banner.remove();
+    }
+    function showDefault(){
+      msg.textContent=defaultMsg;
+      btnRow.innerHTML=''; btnRow.appendChild(resumeBtn); btnRow.appendChild(newBtn);
+    }
+    const resumeBtn=document.createElement('button');
+    resumeBtn.textContent='Resume'; resumeBtn.style.cssText='font-size:12px;padding:5px 11px;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;';
+    resumeBtn.onclick=()=>{ banner.remove(); go('scorecard'); renderScorecard(); };
+    const newBtn=document.createElement('button');
+    newBtn.textContent='New round'; newBtn.style.cssText='font-size:12px;padding:5px 11px;';
+    newBtn.onclick=()=>{
+      msg.textContent='Start a new round? Your current round will be saved to Backups (last '+MAX_ARCHIVE+' kept).';
+      btnRow.innerHTML='';
+      const yes=document.createElement('button');
+      yes.textContent='Yes, new round'; yes.style.cssText='font-size:12px;padding:5px 11px;background:var(--gold-bg);color:var(--gold);border-color:var(--gold);font-weight:600;';
+      yes.onclick=doNewRound;
+      const no=document.createElement('button');
+      no.textContent='Cancel'; no.style.cssText='font-size:12px;padding:5px 11px;';
+      no.onclick=showDefault;
+      btnRow.appendChild(yes); btnRow.appendChild(no);
     };
     btnRow.appendChild(resumeBtn); btnRow.appendChild(newBtn);
     banner.appendChild(msg); banner.appendChild(btnRow);
     document.querySelector('.wrap').insertBefore(banner, document.querySelector('.tabs').nextSibling);
   }
+  renderRecovery();
+  syncSetup();
 })();
 
 // ─── EXPORT ───────────────────────────────────────────────────────────────────
@@ -2000,7 +2296,7 @@ function renderResults(container){
     const hdr=document.createElement('p');
     hdr.style.cssText='font-size:14px;font-weight:700;cursor:pointer;margin:0;display:flex;justify-content:space-between;align-items:center;';
     const hdrLeft=document.createElement('span');
-    hdrLeft.textContent='Rotation '+(ri+1)+': Holes '+physHole(rot.start)+'–'+physHole(rot.end);
+    hdrLeft.textContent=ord(ri+1)+' Rotation · Holes '+physHole(rot.start)+'–'+physHole(rot.end);
     const hdrRight=document.createElement('span');
     hdrRight.style.cssText='font-size:12px;font-weight:400;color:var(--muted);';
     hdrRight.textContent='▸';
